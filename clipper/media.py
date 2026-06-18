@@ -145,8 +145,11 @@ def build_vertical_filter(cfg: Config, ass_path: Optional[str]) -> str:
         last = "[v]"
 
     if ass_path:
-        esc = _escape_filter_path(ass_path)
-        base += f";{last}ass={esc}[vout]"
+        # On nomme explicitement l'option (filename=) et on passe un chemin
+        # absolu : certaines versions de ffmpeg (8.1.x) rejettent la forme
+        # positionnelle « ass=chemin » avec l'erreur « No option name ».
+        esc = _escape_filter_path(os.path.abspath(ass_path))
+        base += f";{last}ass=filename={esc}[vout]"
         last = "[vout]"
 
     return base, last
