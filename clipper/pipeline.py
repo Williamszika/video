@@ -66,13 +66,23 @@ def run(video_path: str, cfg: Config) -> dict:
         raise RuntimeError("Aucun clip retenu après sélection.")
 
     # 7. Sous-titres + rendu -----------------------------------------------------
+    subtitles_enabled = cfg.subtitles and cfg.subtitle_style != "none"
+    ass_available = media.has_filter("ass")
+    if subtitles_enabled and not ass_available:
+        log.warning(
+            "Le filtre 'ass' est absent de ton ffmpeg (compilé sans libass) : "
+            "les shorts seront produits SANS sous-titres incrustés. Pour activer "
+            "les sous-titres animés, installe un ffmpeg avec libass "
+            "(macOS : « brew install ffmpeg-full »)."
+        )
+
     rendered: List[Clip] = []
     for clip in clips:
         out_name = f"{cfg.seed_label}{key}_short{clip.index:02d}_{slugify(clip.hook)}.mp4"
         out_path = os.path.join(cfg.output_dir, out_name)
         ass_path = None
 
-        if cfg.subtitles and cfg.subtitle_style != "none" and clip.words:
+        if subtitles_enabled and ass_available and clip.words:
             ass_path = os.path.join(cfg.work_dir, f"{key}_short{clip.index:02d}.ass")
             subtitles.write_ass(ass_path, clip.words, cfg, clip_start=clip.start,
                                 hook=clip.hook, clip_duration=clip.duration)

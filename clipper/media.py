@@ -7,6 +7,7 @@ sur le système.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import shutil
@@ -46,6 +47,25 @@ def ensure_tools() -> None:
             "Installe ffmpeg : `apt install ffmpeg` (Debian/Ubuntu), "
             "`brew install ffmpeg` (macOS), ou https://ffmpeg.org/download.html"
         )
+
+
+@functools.lru_cache(maxsize=16)
+def has_filter(name: str) -> bool:
+    """Vrai si le filtre ffmpeg `name` est disponible.
+
+    Sert surtout à détecter le filtre 'ass' (incrustation des sous-titres), qui
+    nécessite que ffmpeg ait été compilé avec libass. Certaines distributions
+    (ex. la formule Homebrew « ffmpeg » allégée) ne l'incluent pas.
+    """
+    try:
+        out = _run(["ffmpeg", "-hide_banner", "-filters"], capture=True).stdout
+    except FFmpegError:
+        return False
+    for line in out.splitlines():
+        toks = line.split()
+        if len(toks) >= 2 and toks[1] == name:
+            return True
+    return False
 
 
 def _run(cmd: List[str], *, capture: bool = False) -> subprocess.CompletedProcess:
