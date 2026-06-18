@@ -6,7 +6,7 @@ import json
 import os
 from typing import List
 
-from . import analyze, audio_energy, media, select, subtitles, transcribe
+from . import analyze, audio_energy, media, montage, select, subtitles, transcribe
 from .config import Config
 from .models import Clip
 from .utils import get_logger, human_duration, slugify
@@ -58,6 +58,35 @@ def run(video_path: str, cfg: Config) -> dict:
     moments = analyze.load_or_analyze(transcript, cfg, cache_path=analysis_cache)
     if not moments:
         raise RuntimeError("Aucun moment fort détecté par l'analyse.")
+
+    # 6bis. Mode montage : une seule vidéo « bande-annonce » ---------------------
+    if cfg.mode == "montage":
+        scenes = montage.select_scenes(moments, transcript, cfg, audio=energy,
+                                       video_duration=info.duration)
+        if not scenes:
+            raise RuntimeError("Aucune scène retenue pour le montage.")
+        out_name = f"{cfg.seed_label}{key}_montage.mp4"
+        out_path = os.path.join(cfg.output_dir, out_name)
+        log.info("Rendu du montage (~%.0f min)…", cfg.montage_duration / 60.0)
+        result = montage.render_montage(video_path, scenes, cfg, key, out_path)
+
+        manifest = {
+            "source": os.path.abspath(video_path),
+            "source_duration": info.duration,
+            "mode": "montage",
+            "config": cfg.to_dict(),
+            "language": transcript.language,
+            "output_path": result["output_path"],
+            "duration": result["duration"],
+            "scenes": result["scenes"],
+        }
+        manifest_path = os.path.join(cfg.output_dir, f"{key}.montage.manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, ensure_ascii=False, indent=2)
+        log.info("Terminé : montage de %s dans %s (manifeste : %s).",
+                 human_duration(result["duration"]), result["output_path"],
+                 os.path.basename(manifest_path))
+        return manifest
 
     # 6. Sélection des clips -----------------------------------------------------
     clips = select.select_clips(moments, transcript, cfg, audio=energy,

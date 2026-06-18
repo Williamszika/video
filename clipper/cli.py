@@ -64,6 +64,22 @@ def build_parser() -> argparse.ArgumentParser:
     g_sub.add_argument("--primary-color", default="FFFFFF",
                        help="Couleur des mots (hex RGB).")
 
+    g_mtg = p.add_argument_group("Montage (une seule vidéo « bande-annonce »)")
+    g_mtg.add_argument("--montage", action="store_true",
+                       help="Produire UNE vidéo qui condense le film, au lieu de plusieurs shorts.")
+    g_mtg.add_argument("--montage-duration", type=float, default=300.0,
+                       help="Durée cible du montage (secondes).")
+    g_mtg.add_argument("--scene-duration", type=float, default=30.0,
+                       help="Durée de chaque scène piochée (secondes).")
+    g_mtg.add_argument("--transition", default="fade",
+                       help="Type de transition (fade, dissolve, wipeleft, slideright…).")
+    g_mtg.add_argument("--transition-duration", type=float, default=0.7,
+                       help="Durée des transitions (secondes).")
+    g_mtg.add_argument("--cta", dest="cta_text", default=None,
+                       help="Texte du carton d'appel à l'action en fin de montage.")
+    g_mtg.add_argument("--no-cta", dest="cta_enabled", action="store_false",
+                       help="Ne pas afficher le carton d'appel à l'action.")
+
     g_out = p.add_argument_group("Sortie")
     g_out.add_argument("-o", "--output", dest="output_dir", default="output",
                        help="Dossier de sortie.")
@@ -106,6 +122,13 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         primary_color=args.primary_color,
         output_dir=args.output_dir,
         keep_audio=args.keep_audio,
+        mode="montage" if args.montage else "shorts",
+        montage_duration=args.montage_duration,
+        scene_duration=args.scene_duration,
+        transition=args.transition,
+        transition_duration=args.transition_duration,
+        cta_text=args.cta_text,
+        cta_enabled=args.cta_enabled,
     )
 
 
@@ -150,6 +173,15 @@ def main(argv=None) -> int:
         return 1
 
     print()
+    if manifest.get("mode") == "montage":
+        dur = manifest["duration"]
+        print(f"✅ Montage de {int(dur // 60)}:{int(dur % 60):02d} généré dans « {cfg.output_dir}/ » :")
+        print(f"   → {manifest['output_path']}")
+        print(f"   {len(manifest['scenes'])} scène(s) enchaînées :")
+        for sc in manifest["scenes"]:
+            print(f"     #{sc['index']:02d}  {sc['emotion']:<10}  « {sc['hook']} »")
+        return 0
+
     print(f"✅ {manifest['num_clips']} short(s) généré(s) dans « {cfg.output_dir}/ » :")
     for clip in manifest["clips"]:
         mm = int(clip["duration"] // 60)

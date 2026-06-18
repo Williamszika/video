@@ -213,3 +213,95 @@ def render_clip(
     ]
     _run(cmd)
     return out_path
+
+
+# --------------------------------------------------------------------------- #
+# Mode montage (bande-annonce)
+# --------------------------------------------------------------------------- #
+
+def render_scene(src: str, start: float, duration: float, out_path: str, cfg: Config,
+                 fps: int, cta_png: Optional[str] = None) -> str:
+    """Rend une scène : découpe, recadre en 9:16, fps fixe, carton CTA optionnel.
+
+    Toutes les scènes partagent la même résolution, le même fps et le même format
+    pixel, ce qui est indispensable pour l'assemblage par fondu enchaîné (xfade).
+    """
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    base, last = build_vertical_filter(cfg, None)
+
+    if cta_png:
+        # Le carton est une image 9:16 transparente, superposée plein cadre.
+        filt = f"{base};{last}[1:v]overlay=(W-w)/2:(H-h)/2[vout]"
+        vmap = "[vout]"
+    else:
+        filt, vmap = base, last
+
+    cmd = ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", src]
+    if cta_png:
+        cmd += ["-loop", "1", "-i", cta_png]
+    cmd += [
+        "-filter_complex", filt,
+        "-map", vmap, "-map", "0:a?",
+        "-t", f"{duration:.3f}", "-r", str(fps),
+        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
+        out_path,
+    ]
+    _run(cmd)
+    return out_path
+
+
+def concat_scenes(scene_files: List[str], out_path: str, cfg: Config, fps: int) -> str:
+    """Assemble les scènes avec des transitions en fondu enchaîné (xfade).
+
+    Si le filtre xfade n'est pas disponible, bascule sur un collage net (concat).
+    """
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    n = len(scene_files)
+    if n == 1:
+        shutil.copy(scene_files[0], out_path)
+        return out_path
+
+    use_xfade = has_filter("xfade")
+    T = cfg.transition_duration
+    durations = [probe(f).duration for f in scene_files]
+
+    inputs: List[str] = []
+    for f in scene_files:
+        inputs += ["-i", f]
+
+    parts: List[str] = []
+    # Normalisation de chaque entrée vidéo/audio.
+    for i in range(n):
+        parts.append(f"[{i}:v]fps={fps},format=yuv420p,setsar=1,setpts=PTS-STARTPTS[v{i}]")
+        parts.append(f"[{i}:a]aresample=48000,asetpts=PTS-STARTPTS[a{i}]")
+
+    if use_xfade:
+        # Chaîne de fondus enchaînés : l'offset cumule les durées réelles.
+        cur_v = "[v0]"
+        acc = durations[0]
+        for j in range(1, n):
+            out_v = "[vout]" if j == n - 1 else f"[vx{j}]"
+            offset = max(0.0, acc - T)
+            parts.append(f"{cur_v}[v{j}]xfade=transition={cfg.transition}:"
+                         f"duration={T}:offset={offset:.3f}{out_v}")
+            cur_v = out_v
+            acc = offset + durations[j]
+
+        cur_a = "[a0]"
+        for j in range(1, n):
+            out_a = "[aout]" if j == n - 1 else f"[ax{j}]"
+            parts.append(f"{cur_a}[a{j}]acrossfade=d={T}{out_a}")
+            cur_a = out_a
+    else:
+        log.warning("Filtre 'xfade' indisponible : collage net sans transitions.")
+        streams = "".join(f"[v{i}][a{i}]" for i in range(n))
+        parts.append(f"{streams}concat=n={n}:v=1:a=1[vout][aout]")
+
+    filt = ";".join(parts)
+    cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", filt,
+           "-map", "[vout]", "-map", "[aout]",
+           "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out_path]
+    _run(cmd)
+    return out_path

@@ -58,6 +58,17 @@ class Config:
     show_hook: bool = True
     hook_duration: float = 3.0        # durée d'affichage de l'accroche (secondes)
 
+    # --- Mode montage (une seule vidéo ~5 min, façon bande-annonce) ---
+    mode: str = "shorts"              # "shorts" | "montage"
+    montage_duration: float = 300.0   # durée cible du montage (secondes) -> ~5 min
+    scene_duration: float = 30.0      # durée de chaque scène piochée
+    montage_fps: int = 30
+    transition: str = "fade"          # transition xfade (fade, dissolve, wipeleft, slideright, …)
+    transition_duration: float = 0.7  # durée des transitions (secondes)
+    cta_enabled: bool = True          # carton d'appel à l'action en fin de montage
+    cta_text: str = ("Abonne-toi sur Film HD sur Telegram pour regarder "
+                     "l'intégralité du film. Lien dans ma Bio")
+
     # --- Pondération du score de viralité ---
     weight_ai: float = 0.75           # poids du score Claude
     weight_audio: float = 0.25        # poids de l'énergie audio (rires, cris, emphase)
@@ -101,6 +112,13 @@ class Config:
             raise ValueError("num_clips doit valoir au moins 1.")
         if self.crop_mode not in {"center", "blur"}:
             raise ValueError("crop_mode doit valoir 'center' ou 'blur'.")
+        if self.mode not in {"shorts", "montage"}:
+            raise ValueError("mode doit valoir 'shorts' ou 'montage'.")
+        if self.mode == "montage":
+            if self.scene_duration <= self.transition_duration * 2:
+                raise ValueError("scene_duration doit être nettement supérieure à transition_duration.")
+            if self.montage_duration < self.scene_duration:
+                raise ValueError("montage_duration doit être au moins égale à scene_duration.")
         if self.subtitle_style not in {"animated", "simple", "none"}:
             raise ValueError("subtitle_style doit valoir 'animated', 'simple' ou 'none'.")
         if not (0.0 <= self.weight_ai <= 1.0 and 0.0 <= self.weight_audio <= 1.0):

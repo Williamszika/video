@@ -91,6 +91,26 @@ clipper interview.mp4 -l en --whisper-model medium --whisper-device cpu -o short
 clipper film.mp4 --subtitles none
 ```
 
+### 🎞️ Mode montage (bande-annonce de ~5 min)
+
+Au lieu de plusieurs shorts, produire **une seule vidéo** qui condense le film :
+elle enchaîne les scènes les plus fortes (ordre chronologique) avec des
+**transitions**, et affiche un **carton d'appel à l'action** sur la dernière
+scène pour renvoyer vers ta page (Telegram, etc.).
+
+```bash
+# Bande-annonce verticale de 5 min, avec CTA personnalisé
+clipper film.mp4 --montage \
+  --cta "Abonne-toi sur Film HD sur Telegram pour voir le film complet. Lien dans ma Bio"
+
+# 4 min, scènes de 25 s, transition « dissolve »
+clipper film.mp4 --montage --montage-duration 240 --scene-duration 25 --transition dissolve
+```
+
+Le carton CTA est rendu en image (Pillow) puis incrusté : **pas besoin de libass**,
+ça marche même avec un ffmpeg minimal. Options : `--montage-duration`,
+`--scene-duration`, `--transition`, `--transition-duration`, `--cta`, `--no-cta`.
+
 Sortie typique :
 
 ```
