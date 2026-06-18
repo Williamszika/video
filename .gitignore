@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.Python
+
+# Environnement / secrets
+.env
+*.key
+
+# Sorties du pipeline
+output/
+out/
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.ass
+*.srt
+work/
+.cache/
+
+# Modèles Whisper téléchargés
+models/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# On garde les petits fichiers d'exemple/fixtures
+!tests/fixtures/*.json

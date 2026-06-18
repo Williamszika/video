@@ -1,0 +1,14 @@
+# Analyse intelligente des moments forts (API Claude)
+anthropic>=0.40.0
+
+# Transcription locale avec horodatage des mots
+faster-whisper>=1.0.0
+
+# Analyse du signal audio (énergie / pics d'intensité)
+numpy>=1.24
+
+# Chargement du fichier .env (clé API, options)
+python-dotenv>=1.0.0
+
+# NB : ffmpeg et ffprobe doivent être installés sur le système (binaires),
+# ce ne sont pas des paquets pip. Voir le README.
