@@ -146,6 +146,40 @@ def make_cta_image(text: str, cfg: Config, out_png: str) -> str:
     return out_png
 
 
+def make_title_image(title: str, cfg: Config, out_png: str) -> str:
+    """Génère un PNG transparent 9:16 avec le nom du film, en grand, centré."""
+    from PIL import Image, ImageDraw
+
+    W, H = cfg.width, cfg.height
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    font = _load_font(int(W * 0.11))
+    lines = _wrap_lines(draw, title.upper(), font, int(W * 0.86))
+    ascent = font.getbbox("Ag")
+    line_h = (ascent[3] - ascent[1]) + int(W * 0.03)
+    block_h = line_h * len(lines)
+    y = (H - block_h) // 2
+
+    for line in lines:
+        lw = draw.textlength(line, font=font)
+        draw.text(((W - lw) / 2, y), line, font=font, fill=(255, 255, 255, 255),
+                  stroke_width=4, stroke_fill=(0, 0, 0, 255))
+        y += line_h
+
+    # Petit liseré d'accent sous le titre.
+    accent = _hex_rgb(cfg.highlight_color)
+    uw = int(W * 0.22)
+    ux = (W - uw) // 2
+    uy = y + int(W * 0.015)
+    draw.rounded_rectangle([ux, uy, ux + uw, uy + int(W * 0.013)],
+                           radius=6, fill=accent + (255,))
+
+    os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
+    img.save(out_png)
+    return out_png
+
+
 def _hex_rgb(hex_rgb: str) -> tuple:
     hex_rgb = hex_rgb.lstrip("#")
     if len(hex_rgb) != 6:
@@ -167,6 +201,18 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
         make_cta_image(cfg.cta_text, cfg, cta_png)
 
     scene_files: List[str] = []
+
+    # Générique animé en ouverture (nom du film).
+    if cfg.intro_title.strip():
+        title_png = os.path.join(cfg.work_dir, f"{key}_title.png")
+        make_title_image(cfg.intro_title, cfg, title_png)
+        intro_file = os.path.join(cfg.work_dir, f"{key}_montage_intro.mp4")
+        bg_start = scenes[0][0] if scenes else 0.0
+        log.info("  générique : « %s »", cfg.intro_title)
+        media.render_intro(video_path, bg_start, cfg.intro_duration, title_png,
+                           intro_file, cfg, fps)
+        scene_files.append(intro_file)
+
     for i, (start, end, _moment) in enumerate(scenes):
         scene_file = os.path.join(cfg.work_dir, f"{key}_montage_scene{i:02d}.mp4")
         is_last = (i == len(scenes) - 1)

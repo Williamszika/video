@@ -68,6 +68,8 @@ class Config:
     cta_enabled: bool = True          # carton d'appel à l'action en fin de montage
     cta_text: str = ("Abonne-toi sur Film HD sur Telegram pour regarder "
                      "l'intégralité du film. Lien dans ma Bio")
+    intro_title: str = ""             # nom du film -> générique animé en ouverture (vide = pas de générique)
+    intro_duration: float = 3.0       # durée du générique (secondes)
 
     # --- Pondération du score de viralité ---
     weight_ai: float = 0.75           # poids du score Claude

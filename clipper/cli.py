@@ -79,6 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Texte du carton d'appel à l'action en fin de montage.")
     g_mtg.add_argument("--no-cta", dest="cta_enabled", action="store_false",
                        help="Ne pas afficher le carton d'appel à l'action.")
+    g_mtg.add_argument("--title", dest="intro_title", default=None,
+                       help="Nom du film : ajoute un générique animé en ouverture du montage.")
+    g_mtg.add_argument("--intro-duration", type=float, default=3.0,
+                       help="Durée du générique d'ouverture (secondes).")
 
     g_out = p.add_argument_group("Sortie")
     g_out.add_argument("-o", "--output", dest="output_dir", default="output",
@@ -129,6 +133,8 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         transition_duration=args.transition_duration,
         cta_text=args.cta_text,
         cta_enabled=args.cta_enabled,
+        intro_title=args.intro_title,
+        intro_duration=args.intro_duration,
     )
 
 

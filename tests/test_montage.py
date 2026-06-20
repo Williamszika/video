@@ -67,3 +67,19 @@ def test_make_cta_image_creates_png(tmp_path):
     assert im.size == (1080, 1920)
     # le bandeau central doit être opaque
     assert im.getpixel((540, 960))[3] > 0
+
+
+def test_make_title_image_creates_png(tmp_path):
+    pytest.importorskip("PIL")
+    from clipper.montage import make_title_image
+
+    cfg = Config(width=1080, height=1920)
+    out = tmp_path / "title.png"
+    make_title_image("Le Destin de Michael", cfg, str(out))
+    assert out.is_file()
+
+    from PIL import Image
+    im = Image.open(out).convert("RGBA")
+    assert im.size == (1080, 1920)
+    # du texte opaque a bien été dessiné
+    assert any(p[3] > 0 for p in im.getdata())

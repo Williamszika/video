@@ -251,6 +251,38 @@ def render_scene(src: str, start: float, duration: float, out_path: str, cfg: Co
     return out_path
 
 
+def render_intro(src: str, bg_start: float, duration: float, title_png: str,
+                 out_path: str, cfg: Config, fps: int) -> str:
+    """Rend le générique animé : fond flou (tiré du film) + titre en fondu/montée.
+
+    Le titre est une image (Pillow) ; son animation (fondu alpha + légère montée)
+    et le fond flou sont gérés par ffmpeg — aucune dépendance à libass.
+    """
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    w, h = cfg.width, cfg.height
+    fade_out_start = max(0.1, duration - 0.6)
+
+    filt = (
+        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},"
+        f"boxblur=26:2,eq=brightness=-0.12:saturation=0.9[bg];"
+        f"[1:v]fade=t=in:st=0:d=0.7:alpha=1,"
+        f"fade=t=out:st={fade_out_start:.2f}:d=0.6:alpha=1[ttl];"
+        # Le titre monte légèrement pendant son apparition (animation).
+        f"[bg][ttl]overlay=x=(W-w)/2:y='(H-h)/2 + 60*(1-min(t/0.7,1))'[vout];"
+        f"[0:a]afade=t=in:st=0:d=0.5[aout]"
+    )
+    cmd = [
+        "ffmpeg", "-y", "-ss", f"{bg_start:.3f}", "-i", src, "-loop", "1", "-i", title_png,
+        "-filter_complex", filt, "-map", "[vout]", "-map", "[aout]",
+        "-t", f"{duration:.3f}", "-r", str(fps),
+        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
+        out_path,
+    ]
+    _run(cmd)
+    return out_path
+
+
 def concat_scenes(scene_files: List[str], out_path: str, cfg: Config, fps: int) -> str:
     """Assemble les scènes avec des transitions en fondu enchaîné (xfade).
 
