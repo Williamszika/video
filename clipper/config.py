@@ -70,6 +70,7 @@ class Config:
                      "l'intégralité du film. Lien dans ma Bio")
     intro_title: str = ""             # nom du film -> générique animé en ouverture (vide = pas de générique)
     intro_duration: float = 3.0       # durée du générique (secondes)
+    parts: int = 1                    # découper le film en N parties (1 = un seul montage)
 
     # --- Pondération du score de viralité ---
     weight_ai: float = 0.75           # poids du score Claude
@@ -121,6 +122,8 @@ class Config:
                 raise ValueError("scene_duration doit être nettement supérieure à transition_duration.")
             if self.montage_duration < self.scene_duration:
                 raise ValueError("montage_duration doit être au moins égale à scene_duration.")
+        if not (1 <= self.parts <= 20):
+            raise ValueError("parts doit être compris entre 1 et 20.")
         if self.subtitle_style not in {"animated", "simple", "none"}:
             raise ValueError("subtitle_style doit valoir 'animated', 'simple' ou 'none'.")
         if not (0.0 <= self.weight_ai <= 1.0 and 0.0 <= self.weight_audio <= 1.0):

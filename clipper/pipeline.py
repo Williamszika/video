@@ -59,33 +59,51 @@ def run(video_path: str, cfg: Config) -> dict:
     if not moments:
         raise RuntimeError("Aucun moment fort détecté par l'analyse.")
 
-    # 6bis. Mode montage : une seule vidéo « bande-annonce » ---------------------
+    # 6bis. Mode montage : une (ou plusieurs) vidéo(s) « bande-annonce » ---------
     if cfg.mode == "montage":
-        scenes = montage.select_scenes(moments, transcript, cfg, audio=energy,
-                                       video_duration=info.duration)
-        if not scenes:
-            raise RuntimeError("Aucune scène retenue pour le montage.")
-        out_name = f"{cfg.seed_label}{key}_montage.mp4"
-        out_path = os.path.join(cfg.output_dir, out_name)
-        log.info("Rendu du montage (~%.0f min)…", cfg.montage_duration / 60.0)
-        result = montage.render_montage(video_path, scenes, cfg, key, out_path)
+        n_parts = max(1, cfg.parts)
+        total = info.duration
+        parts_out = []
+        for p in range(n_parts):
+            window = subtitle = None
+            label = "montage"
+            if n_parts > 1:
+                window = (p * total / n_parts, (p + 1) * total / n_parts)
+                subtitle = f"Partie {p + 1} / {n_parts}"
+                label = f"partie{p + 1}"
+                log.info("=== Partie %d/%d (≈ %.0f min) ===", p + 1, n_parts,
+                         cfg.montage_duration / 60.0)
+            else:
+                log.info("Rendu du montage (~%.0f min)…", cfg.montage_duration / 60.0)
+
+            scenes = montage.select_scenes(moments, transcript, cfg, audio=energy,
+                                           video_duration=total, window=window)
+            if not scenes:
+                log.warning("Partie %d : aucune scène retenue, ignorée.", p + 1)
+                continue
+            out_path = os.path.join(cfg.output_dir, f"{cfg.seed_label}{key}_{label}.mp4")
+            result = montage.render_montage(video_path, scenes, cfg, f"{key}_{label}",
+                                            out_path, subtitle=subtitle or "")
+            result["part"] = (p + 1) if n_parts > 1 else None
+            parts_out.append(result)
+
+        if not parts_out:
+            raise RuntimeError("Aucune partie n'a pu être montée.")
 
         manifest = {
             "source": os.path.abspath(video_path),
             "source_duration": info.duration,
             "mode": "montage",
+            "parts": n_parts,
             "config": cfg.to_dict(),
             "language": transcript.language,
-            "output_path": result["output_path"],
-            "duration": result["duration"],
-            "scenes": result["scenes"],
+            "outputs": parts_out,
         }
         manifest_path = os.path.join(cfg.output_dir, f"{key}.montage.manifest.json")
         with open(manifest_path, "w", encoding="utf-8") as fh:
             json.dump(manifest, fh, ensure_ascii=False, indent=2)
-        log.info("Terminé : montage de %s dans %s (manifeste : %s).",
-                 human_duration(result["duration"]), result["output_path"],
-                 os.path.basename(manifest_path))
+        log.info("Terminé : %d montage(s) dans %s/ (manifeste : %s).",
+                 len(parts_out), cfg.output_dir, os.path.basename(manifest_path))
         return manifest
 
     # 6. Sélection des clips -----------------------------------------------------

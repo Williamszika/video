@@ -103,13 +103,26 @@ scène pour renvoyer vers ta page (Telegram, etc.).
 clipper film.mp4 --montage \
   --cta "Abonne-toi sur Film HD sur Telegram pour voir le film complet. Lien dans ma Bio"
 
-# 4 min, scènes de 25 s, transition « dissolve »
-clipper film.mp4 --montage --montage-duration 240 --scene-duration 25 --transition dissolve
+# Avec générique animé (nom du film) en ouverture
+clipper film.mp4 --montage --title "Le Destin de Michael" \
+  --cta "Abonne-toi sur Film HD sur Telegram. Lien dans ma Bio"
+
+# Découper le film en 5 parties chronologiques de 5 min (Partie 1 → Partie 5)
+clipper film.mp4 --parts 5 --crop blur --title "Le Destin de Michael" \
+  --cta "Abonne-toi sur Film HD sur Telegram pour voir le film complet. Lien dans ma Bio"
 ```
 
-Le carton CTA est rendu en image (Pillow) puis incrusté : **pas besoin de libass**,
-ça marche même avec un ffmpeg minimal. Options : `--montage-duration`,
-`--scene-duration`, `--transition`, `--transition-duration`, `--cta`, `--no-cta`.
+- **Générique animé** : `--title "Nom du film"` ajoute un carton d'ouverture (nom
+  en fondu + montée, fond flou). Réglable avec `--intro-duration`.
+- **Plusieurs parties** : `--parts 5` découpe le film en 5 portions
+  **chronologiques** qui se suivent logiquement (Partie 1 = début … Partie 5 = fin).
+  Chaque partie a son générique « Partie N / 5 » et son carton CTA. Idéal pour
+  poster un film en feuilleton et faire revenir l'audience.
+
+Tous les textes (générique, CTA) sont rendus en image (Pillow) puis incrustés :
+**pas besoin de libass**, ça marche même avec un ffmpeg minimal. Options :
+`--montage-duration`, `--scene-duration`, `--transition`, `--transition-duration`,
+`--cta`, `--no-cta`, `--title`, `--intro-duration`, `--parts`.
 
 Sortie typique :
 

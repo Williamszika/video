@@ -29,38 +29,61 @@ Scene = Tuple[float, float, Moment]  # (start, end, moment)
 # --------------------------------------------------------------------------- #
 
 def select_scenes(moments: List[Moment], transcript: Transcript, cfg: Config,
-                  audio=None, video_duration: float = None) -> List[Scene]:
-    """Choisit les meilleurs extraits courts pour remplir la durée du montage."""
+                  audio=None, video_duration: float = None,
+                  window: Tuple[float, float] = None) -> List[Scene]:
+    """Choisit les meilleurs extraits courts pour remplir la durée du montage.
+
+    `window` limite la sélection à une portion chronologique du film (utile pour
+    découper en plusieurs parties). Si les moments forts ne suffisent pas à
+    remplir la durée visée, on complète avec des extraits régulièrement espacés
+    sur la fenêtre (pour couvrir toute la portion).
+    """
     if video_duration is None:
         video_duration = transcript.duration
+    w0, w1 = window if window else (0.0, video_duration)
+    w1 = min(w1, video_duration)
 
     select.compute_scores(moments, cfg, audio)
-    ranked = sorted(moments, key=lambda m: m.final_score, reverse=True)
-
     D = cfg.scene_duration
     T = cfg.transition_duration
-    # total ≈ n*D - (n-1)*T  ->  n ≈ (montage_duration - T) / (D - T)
     n_target = max(2, round((cfg.montage_duration - T) / max(1e-6, D - T)))
 
     seg_starts = [s.start for s in transcript.segments]
+    usable_end = max(w0, w1 - D)
     chosen: List[Scene] = []
-    for m in ranked:
+
+    def _place(raw_start: float) -> Tuple[float, float]:
+        start = select._nearest(raw_start, seg_starts, tolerance=5.0)
+        start = max(w0, min(start, usable_end))
+        return start, start + D
+
+    def _fits(start: float, end: float) -> bool:
+        if start < w0 - 1e-6 or end > w1 + 1e-6:
+            return False
+        return not any(not (end <= c[0] or start >= c[1]) for c in chosen)
+
+    # 1) Les moments forts repérés par l'IA, dans la fenêtre, du meilleur au moins bon.
+    in_window = [m for m in moments if w0 <= m.start < w1]
+    for m in sorted(in_window, key=lambda m: m.final_score, reverse=True):
         if len(chosen) >= n_target:
             break
-        start = max(0.0, min(m.start, max(0.0, video_duration - D)))
-        start = select._nearest(start, seg_starts, tolerance=5.0)
-        start = max(0.0, min(start, max(0.0, video_duration - D)))
-        end = min(video_duration, start + D)
-        if end - start < D * 0.6:
-            continue
-        # Pas de chevauchement avec les scènes déjà retenues.
-        if any(not (end <= c[0] or start >= c[1]) for c in chosen):
-            continue
-        chosen.append((start, end, m))
+        start, end = _place(m.start)
+        if _fits(start, end):
+            chosen.append((start, end, m))
 
-    # Ordre chronologique -> on raconte le film en condensé.
+    # 2) Complément régulièrement espacé si la fenêtre n'est pas assez remplie.
+    if len(chosen) < n_target and usable_end > w0:
+        grid = n_target * 3
+        for k in range(grid + 1):
+            if len(chosen) >= n_target:
+                break
+            start, end = _place(w0 + (usable_end - w0) * k / grid)
+            if _fits(start, end):
+                chosen.append((start, end, Moment(start=start, end=end, hook="", score=0.0)))
+
     chosen.sort(key=lambda c: c[0])
-    log.info("Montage : %d scène(s) sélectionnée(s).", len(chosen))
+    log.info("Montage : %d scène(s) sélectionnée(s)%s.", len(chosen),
+             f" (fenêtre {w0:.0f}-{w1:.0f}s)" if window else "")
     return chosen
 
 
@@ -146,13 +169,14 @@ def make_cta_image(text: str, cfg: Config, out_png: str) -> str:
     return out_png
 
 
-def make_title_image(title: str, cfg: Config, out_png: str) -> str:
-    """Génère un PNG transparent 9:16 avec le nom du film, en grand, centré."""
+def make_title_image(title: str, cfg: Config, out_png: str, subtitle: str = "") -> str:
+    """Génère un PNG transparent 9:16 avec le nom du film (et un sous-titre)."""
     from PIL import Image, ImageDraw
 
     W, H = cfg.width, cfg.height
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+    accent = _hex_rgb(cfg.highlight_color)
 
     font = _load_font(int(W * 0.11))
     lines = _wrap_lines(draw, title.upper(), font, int(W * 0.86))
@@ -168,12 +192,18 @@ def make_title_image(title: str, cfg: Config, out_png: str) -> str:
         y += line_h
 
     # Petit liseré d'accent sous le titre.
-    accent = _hex_rgb(cfg.highlight_color)
     uw = int(W * 0.22)
     ux = (W - uw) // 2
     uy = y + int(W * 0.015)
     draw.rounded_rectangle([ux, uy, ux + uw, uy + int(W * 0.013)],
                            radius=6, fill=accent + (255,))
+
+    # Sous-titre (ex. « PARTIE 1 ») sous le liseré.
+    if subtitle.strip():
+        sfont = _load_font(int(W * 0.058))
+        sw = draw.textlength(subtitle.upper(), font=sfont)
+        draw.text(((W - sw) / 2, uy + int(W * 0.04)), subtitle.upper(), font=sfont,
+                  fill=accent + (255,), stroke_width=2, stroke_fill=(0, 0, 0, 255))
 
     os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
     img.save(out_png)
@@ -192,7 +222,7 @@ def _hex_rgb(hex_rgb: str) -> tuple:
 # --------------------------------------------------------------------------- #
 
 def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
-                   key: str, out_path: str) -> dict:
+                   key: str, out_path: str, subtitle: str = "") -> dict:
     """Rend chaque scène puis les assemble avec transitions + carton CTA final."""
     fps = cfg.montage_fps
     cta_png = None
@@ -202,13 +232,13 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
 
     scene_files: List[str] = []
 
-    # Générique animé en ouverture (nom du film).
+    # Générique animé en ouverture (nom du film + éventuel « Partie N »).
     if cfg.intro_title.strip():
         title_png = os.path.join(cfg.work_dir, f"{key}_title.png")
-        make_title_image(cfg.intro_title, cfg, title_png)
+        make_title_image(cfg.intro_title, cfg, title_png, subtitle=subtitle)
         intro_file = os.path.join(cfg.work_dir, f"{key}_montage_intro.mp4")
         bg_start = scenes[0][0] if scenes else 0.0
-        log.info("  générique : « %s »", cfg.intro_title)
+        log.info("  générique : « %s »%s", cfg.intro_title, f" — {subtitle}" if subtitle else "")
         media.render_intro(video_path, bg_start, cfg.intro_duration, title_png,
                            intro_file, cfg, fps)
         scene_files.append(intro_file)
@@ -224,6 +254,13 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
 
     log.info("Assemblage des %d scène(s) avec transitions « %s »…", len(scene_files), cfg.transition)
     media.concat_scenes(scene_files, out_path, cfg, fps)
+
+    # Nettoyage des fichiers intermédiaires (libère le disque, important en multi-parties).
+    for f in scene_files:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
 
     info = media.probe(out_path)
     return {

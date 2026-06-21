@@ -83,6 +83,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Nom du film : ajoute un générique animé en ouverture du montage.")
     g_mtg.add_argument("--intro-duration", type=float, default=3.0,
                        help="Durée du générique d'ouverture (secondes).")
+    g_mtg.add_argument("--parts", type=int, default=1,
+                       help="Découper le film en N parties chronologiques (ex. 5 = Partie 1 à 5). "
+                            "Active automatiquement le mode montage.")
 
     g_out = p.add_argument_group("Sortie")
     g_out.add_argument("-o", "--output", dest="output_dir", default="output",
@@ -126,7 +129,8 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         primary_color=args.primary_color,
         output_dir=args.output_dir,
         keep_audio=args.keep_audio,
-        mode="montage" if args.montage else "shorts",
+        mode="montage" if (args.montage or args.parts > 1) else "shorts",
+        parts=args.parts,
         montage_duration=args.montage_duration,
         scene_duration=args.scene_duration,
         transition=args.transition,
@@ -180,12 +184,15 @@ def main(argv=None) -> int:
 
     print()
     if manifest.get("mode") == "montage":
-        dur = manifest["duration"]
-        print(f"✅ Montage de {int(dur // 60)}:{int(dur % 60):02d} généré dans « {cfg.output_dir}/ » :")
-        print(f"   → {manifest['output_path']}")
-        print(f"   {len(manifest['scenes'])} scène(s) enchaînées :")
-        for sc in manifest["scenes"]:
-            print(f"     #{sc['index']:02d}  {sc['emotion']:<10}  « {sc['hook']} »")
+        outs = manifest["outputs"]
+        n = len(outs)
+        word = "montage" if n == 1 else "parties"
+        print(f"✅ {n} {word} généré(s) dans « {cfg.output_dir}/ » :")
+        for res in outs:
+            dur = res["duration"]
+            label = f"Partie {res['part']}" if res.get("part") else "Montage"
+            print(f"   {label}  [{int(dur // 60)}:{int(dur % 60):02d}]  "
+                  f"({len(res['scenes'])} scènes)  → {res['output_path']}")
         return 0
 
     print(f"✅ {manifest['num_clips']} short(s) généré(s) dans « {cfg.output_dir}/ » :")
