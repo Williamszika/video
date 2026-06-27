@@ -211,6 +211,73 @@ def generate_hashtags(cfg: Config, *, title: str = "", part_label: str = "",
     }
 
 
+# --------------------------------------------------------------------------- #
+# Détection automatique du titre du film
+# --------------------------------------------------------------------------- #
+
+TITLE_SYSTEM_PROMPT = """\
+Tu es un expert du cinéma. À partir du NOM DE FICHIER d'une vidéo et d'un \
+extrait de ses dialogues, tu dois retrouver le TITRE du film (ou de la série / \
+de la vidéo).
+
+Le nom de fichier contient souvent le titre, mais pollué par des éléments à \
+IGNORER : année, qualité (1080p, 4K, HD…), langue (VF, VOSTFR…), plateforme ou \
+mentions parasites (Online, Streaming, Sans Publicité, Flemmix, noms de team / \
+de release), extension, tirets et underscores. Nettoie tout cela.
+
+Les dialogues peuvent t'aider à confirmer ou à identifier le film : réplique \
+connue, nom d'un personnage principal, univers reconnaissable.
+
+Donne un titre PROPRE, correctement orthographié et capitalisé, prêt à être \
+affiché à l'écran (sans année ni mention technique). Si tu n'es pas certain, \
+donne ta meilleure hypothèse à partir du nom de fichier et mets confident=false.\
+"""
+
+
+TITLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "confident": {"type": "boolean"},
+    },
+    "required": ["title", "confident"],
+    "additionalProperties": False,
+}
+
+
+def detect_title(cfg: Config, *, filename: str, transcript: Transcript,
+                 max_lines: int = 50) -> str:
+    """Déduit le titre du film via Claude (nom de fichier + extrait de dialogues).
+
+    Renvoie une chaîne (vide si rien d'exploitable). La gestion du cache est à
+    la charge de l'appelant.
+    """
+    sample = _format_chunk(transcript.segments[:max_lines])
+    user_prompt = (
+        f"Nom du fichier : « {filename} ».\n\n"
+        f"Début des dialogues :\n{sample or '(aucun dialogue exploitable)'}\n\n"
+        f"Quel est le titre de ce film ?"
+    )
+    client = _get_client(cfg)
+    message = client.messages.create(
+        model=cfg.model,
+        max_tokens=500,
+        thinking={"type": "adaptive"},
+        output_config={
+            "effort": "low",
+            "format": {"type": "json_schema", "schema": TITLE_SCHEMA},
+        },
+        system=[{
+            "type": "text",
+            "text": TITLE_SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }],
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    data = _extract_json(message)
+    return (data.get("title") or "").strip()
+
+
 def _build_chunks(transcript: Transcript, chunk_seconds: float):
     """Découpe les segments en tranches temporelles successives."""
     if not transcript.segments:

@@ -100,20 +100,24 @@ scène pour renvoyer vers ta page (Telegram, etc.).
 
 ```bash
 # Bande-annonce verticale de 5 min, avec CTA personnalisé
+# (le titre du film est détecté automatiquement par l'IA)
 clipper film.mp4 --montage \
   --cta "Abonne-toi sur Film HD sur Telegram pour voir le film complet. Lien dans ma Bio"
 
-# Avec générique animé (nom du film) en ouverture
+# Forcer un titre précis pour le générique
 clipper film.mp4 --montage --title "Le Destin de Michael" \
   --cta "Abonne-toi sur Film HD sur Telegram. Lien dans ma Bio"
 
 # Découper le film en 5 parties chronologiques de 5 min (Partie 1 → Partie 5)
-clipper film.mp4 --parts 5 --crop blur --title "Le Destin de Michael" \
+clipper film.mp4 --parts 5 --crop blur \
   --cta "Abonne-toi sur Film HD sur Telegram pour voir le film complet. Lien dans ma Bio"
 ```
 
-- **Générique animé** : `--title "Nom du film"` ajoute un carton d'ouverture (nom
-  en fondu + montée, fond flou). Réglable avec `--intro-duration`.
+- **Générique animé + titre automatique** : par défaut, l'IA **détecte le titre
+  du film toute seule** (à partir du nom de fichier et des dialogues) et l'affiche
+  en ouverture (nom en fondu + montée, fond flou). Pas besoin de le taper.
+  `--title "Nom du film"` force un titre précis ; `--no-title` retire le générique.
+  Durée réglable avec `--intro-duration`.
 - **Plusieurs parties** : `--parts 5` découpe le film en 5 portions
   **chronologiques** qui se suivent logiquement (Partie 1 = début … Partie 5 = fin).
   Chaque partie a son générique « Partie N / 5 » et son carton CTA. Idéal pour
@@ -128,8 +132,8 @@ clipper film.mp4 --parts 5 --crop blur --title "Le Destin de Michael" \
 Tous les textes (générique, CTA) sont rendus en image (Pillow) puis incrustés :
 **pas besoin de libass**, ça marche même avec un ffmpeg minimal. Options :
 `--montage-duration`, `--scene-duration`, `--transition`, `--transition-duration`,
-`--cta`, `--no-cta`, `--title`, `--intro-duration`, `--parts`, `--hashtags-count`,
-`--no-hashtags`.
+`--cta`, `--no-cta`, `--title`, `--no-title`, `--intro-duration`, `--parts`,
+`--hashtags-count`, `--no-hashtags`.
 
 Sortie typique :
 

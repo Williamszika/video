@@ -80,7 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     g_mtg.add_argument("--no-cta", dest="cta_enabled", action="store_false",
                        help="Ne pas afficher le carton d'appel à l'action.")
     g_mtg.add_argument("--title", dest="intro_title", default=None,
-                       help="Nom du film : ajoute un générique animé en ouverture du montage.")
+                       help="Nom du film pour le générique d'ouverture. Par défaut, "
+                            "l'IA détecte le titre toute seule (nom de fichier + dialogues).")
+    g_mtg.add_argument("--no-title", dest="auto_title", action="store_false",
+                       help="Ne pas afficher de générique d'ouverture (désactive la "
+                            "détection automatique du titre).")
     g_mtg.add_argument("--intro-duration", type=float, default=3.0,
                        help="Durée du générique d'ouverture (secondes).")
     g_mtg.add_argument("--parts", type=int, default=1,
@@ -142,6 +146,7 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         cta_text=args.cta_text,
         cta_enabled=args.cta_enabled,
         intro_title=args.intro_title,
+        auto_title=args.auto_title,
         intro_duration=args.intro_duration,
         hashtags=args.hashtags,
         hashtags_count=args.hashtags_count,
@@ -194,6 +199,9 @@ def main(argv=None) -> int:
         n = len(outs)
         word = "montage" if n == 1 else "parties"
         print(f"✅ {n} {word} généré(s) dans « {cfg.output_dir}/ » :")
+        film_title = manifest.get("config", {}).get("intro_title")
+        if film_title:
+            print(f"   🎬 Titre du film : « {film_title} »")
         for res in outs:
             dur = res["duration"]
             label = f"Partie {res['part']}" if res.get("part") else "Montage"

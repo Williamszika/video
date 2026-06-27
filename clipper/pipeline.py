@@ -61,6 +61,26 @@ def run(video_path: str, cfg: Config) -> dict:
 
     # 6bis. Mode montage : une (ou plusieurs) vidéo(s) « bande-annonce » ---------
     if cfg.mode == "montage":
+        # Titre du générique : détecté par l'IA si l'utilisateur n'en fournit pas.
+        if not cfg.intro_title and cfg.auto_title:
+            title_cache = os.path.join(cfg.work_dir, f"{key}.title.txt")
+            if os.path.isfile(title_cache):
+                with open(title_cache, "r", encoding="utf-8") as fh:
+                    cfg.intro_title = fh.read().strip()
+                if cfg.intro_title:
+                    log.info("Titre du film (cache) : « %s »", cfg.intro_title)
+            else:
+                try:
+                    detected = analyze.detect_title(
+                        cfg, filename=os.path.basename(video_path), transcript=transcript)
+                    if detected:
+                        cfg.intro_title = detected
+                        with open(title_cache, "w", encoding="utf-8") as fh:
+                            fh.write(detected)
+                        log.info("Titre du film détecté automatiquement : « %s »", detected)
+                except Exception as exc:  # noqa: BLE001 - bonus, jamais bloquant
+                    log.warning("Détection automatique du titre ignorée (%s).", exc)
+
         n_parts = max(1, cfg.parts)
         total = info.duration
         parts_out = []

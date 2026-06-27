@@ -68,7 +68,8 @@ class Config:
     cta_enabled: bool = True          # carton d'appel à l'action en fin de montage
     cta_text: str = ("Abonne-toi sur Film HD sur Telegram pour regarder "
                      "l'intégralité du film. Lien dans ma Bio")
-    intro_title: str = ""             # nom du film -> générique animé en ouverture (vide = pas de générique)
+    intro_title: str = ""             # nom du film -> générique animé en ouverture (vide = auto/pas de générique)
+    auto_title: bool = True           # si intro_title vide : laisser l'IA détecter le titre du film
     intro_duration: float = 3.0       # durée du générique (secondes)
     parts: int = 1                    # découper le film en N parties (1 = un seul montage)
     hashtags: bool = True             # générer des hashtags TikTok par montage/partie
