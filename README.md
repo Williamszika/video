@@ -113,15 +113,22 @@ clipper film.mp4 --parts 5 --crop blur \
   --cta "Abonne-toi sur Film HD sur Telegram pour voir le film complet. Lien dans ma Bio"
 ```
 
-- **Générique animé + titre automatique** : par défaut, l'IA **détecte le titre
-  du film toute seule** (à partir du nom de fichier et des dialogues) et l'affiche
-  en ouverture (nom en fondu + montée, fond flou). Pas besoin de le taper.
-  `--title "Nom du film"` force un titre précis ; `--no-title` retire le générique.
-  Durée réglable avec `--intro-duration`.
-- **Plusieurs parties** : `--parts 5` découpe le film en 5 portions
-  **chronologiques** qui se suivent logiquement (Partie 1 = début … Partie 5 = fin).
-  Chaque partie a son générique « Partie N / 5 » et son carton CTA. Idéal pour
-  poster un film en feuilleton et faire revenir l'audience.
+- **Ouverture qui accroche** : pour maximiser la rétention (les 2 premières
+  secondes décident de tout sur TikTok), **l'action démarre dès la première
+  image** — le titre du film est incrusté *par-dessus* la scène (fondu + montée)
+  au lieu d'un carton figé qui ferait scroller. En haut, la **meilleure accroche**
+  de la partie s'affiche quelques secondes (texte généré par l'IA).
+- **Titre automatique** : par défaut, l'IA **détecte le titre du film toute seule**
+  (nom de fichier + dialogues). `--title "Nom du film"` force un titre précis ;
+  `--no-title` retire le générique. Durée réglable avec `--intro-duration`.
+- **Plusieurs parties + effet feuilleton** : `--parts 5` découpe le film en 5
+  portions **chronologiques** qui se suivent logiquement (Partie 1 = début …
+  Partie 5 = fin). Les parties intermédiaires se terminent sur un carton
+  **« La suite dans la Partie N+1 — Abonne-toi »** (pour transformer le
+  spectateur en abonné, sans le sortir de TikTok) ; **seule la dernière partie**
+  affiche le **CTA Telegram**. Idéal pour poster un film en feuilleton, gagner des
+  abonnés et faire revenir l'audience — tout en limitant la redirection
+  hors-plateforme (meilleure longévité du compte).
 - **Hashtags TikTok** (activés par défaut) : pour **chaque** montage/partie, l'IA
   génère **5 hashtags optimisés pour la portée** — un mélange de tags à fort
   trafic (#pourtoi, #film…), de tags ciblés sur le genre/l'émotion, et de tags

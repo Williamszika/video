@@ -103,7 +103,8 @@ def run(video_path: str, cfg: Config) -> dict:
                 continue
             out_path = os.path.join(cfg.output_dir, f"{cfg.seed_label}{key}_{label}.mp4")
             result = montage.render_montage(video_path, scenes, cfg, f"{key}_{label}",
-                                            out_path, subtitle=subtitle or "")
+                                            out_path, subtitle=subtitle or "",
+                                            part=p + 1, n_parts=n_parts)
             result["part"] = (p + 1) if n_parts > 1 else None
 
             # Hashtags TikTok + légende (bonus : ne jamais bloquer le montage).

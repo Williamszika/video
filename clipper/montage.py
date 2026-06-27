@@ -210,6 +210,90 @@ def make_title_image(title: str, cfg: Config, out_png: str, subtitle: str = "") 
     return out_png
 
 
+def make_suite_image(next_part: int, cfg: Config, out_png: str) -> str:
+    """Carton de fin des parties intermédiaires : renvoie vers la partie suivante.
+
+    Objectif : transformer le spectateur en abonné (« reviens pour la suite »),
+    au lieu de l'envoyer hors de TikTok. C'est ce qui fait grimper un compte.
+    """
+    from PIL import Image, ImageDraw
+
+    W, H = cfg.width, cfg.height
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    accent = _hex_rgb(cfg.highlight_color)
+
+    big = _load_font(int(W * 0.105))
+    small = _load_font(int(W * 0.055))
+    line1, line2 = "LA SUITE DANS", f"LA PARTIE {next_part}"
+    sub_lines = _wrap_lines(draw, "Abonne-toi pour ne pas rater la suite", small, int(W * 0.80))
+
+    ab = big.getbbox("Ag")
+    lh_big = (ab[3] - ab[1]) + int(W * 0.03)
+    asb = small.getbbox("Ag")
+    lh_sm = (asb[3] - asb[1]) + int(W * 0.02)
+    gap = int(W * 0.045)
+    pad = int(W * 0.07)
+
+    text_w = max(draw.textlength(line1, font=big), draw.textlength(line2, font=big),
+                 max((draw.textlength(l, font=small) for l in sub_lines), default=0))
+    box_w = min(W - int(W * 0.08), int(text_w) + pad * 2)
+    box_h = lh_big * 2 + gap + lh_sm * len(sub_lines) + pad * 2
+    bx0, by0 = (W - box_w) // 2, (H - box_h) // 2
+    draw.rounded_rectangle([bx0, by0, bx0 + box_w, by0 + box_h],
+                           radius=int(W * 0.03), fill=(0, 0, 0, 190))
+
+    y = by0 + pad
+    for line, color in ((line1, (255, 255, 255, 255)), (line2, accent + (255,))):
+        lw = draw.textlength(line, font=big)
+        draw.text(((W - lw) / 2, y), line, font=big, fill=color,
+                  stroke_width=3, stroke_fill=(0, 0, 0, 255))
+        y += lh_big
+    y += gap
+    for line in sub_lines:
+        lw = draw.textlength(line, font=small)
+        draw.text(((W - lw) / 2, y), line, font=small, fill=(255, 255, 255, 255),
+                  stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        y += lh_sm
+
+    os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
+    img.save(out_png)
+    return out_png
+
+
+def make_hook_image(text: str, cfg: Config, out_png: str) -> str:
+    """Bandeau d'accroche affiché en haut de l'écran pendant les premières secondes."""
+    from PIL import Image, ImageDraw
+
+    W, H = cfg.width, cfg.height
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    font = _load_font(int(W * 0.066))
+    lines = _wrap_lines(draw, text, font, int(W * 0.84))
+    asc = font.getbbox("Ag")
+    line_h = (asc[3] - asc[1]) + int(W * 0.022)
+    pad = int(W * 0.045)
+    text_w = max((draw.textlength(l, font=font) for l in lines), default=0)
+    box_w = min(W - int(W * 0.06), int(text_w) + pad * 2)
+    box_h = line_h * len(lines) + pad * 2
+    bx0 = (W - box_w) // 2
+    by0 = int(H * 0.13)  # vers le haut, sous l'UI de TikTok
+
+    draw.rounded_rectangle([bx0, by0, bx0 + box_w, by0 + box_h],
+                           radius=int(W * 0.025), fill=(0, 0, 0, 170))
+    y = by0 + pad
+    for line in lines:
+        lw = draw.textlength(line, font=font)
+        draw.text(((W - lw) / 2, y), line, font=font, fill=(255, 255, 255, 255),
+                  stroke_width=3, stroke_fill=(0, 0, 0, 255))
+        y += line_h
+
+    os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
+    img.save(out_png)
+    return out_png
+
+
 def _hex_rgb(hex_rgb: str) -> tuple:
     hex_rgb = hex_rgb.lstrip("#")
     if len(hex_rgb) != 6:
@@ -222,34 +306,66 @@ def _hex_rgb(hex_rgb: str) -> tuple:
 # --------------------------------------------------------------------------- #
 
 def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
-                   key: str, out_path: str, subtitle: str = "") -> dict:
-    """Rend chaque scène puis les assemble avec transitions + carton CTA final."""
+                   key: str, out_path: str, subtitle: str = "",
+                   part: int = None, n_parts: int = 1) -> dict:
+    """Rend chaque scène puis les assemble avec transitions et incrustations.
+
+    Ouverture optimisée pour la rétention TikTok :
+      - le titre du film est incrusté SUR la première scène (pas de carton figé
+        qui ferait fuir avant l'action) ;
+      - la meilleure accroche de la partie s'affiche en bandeau haut au démarrage.
+
+    Carton de fin : les parties intermédiaires renvoient vers la partie suivante
+    (« La suite dans la Partie N+1 ») pour gagner des abonnés ; seule la dernière
+    partie (ou un montage unique) affiche le CTA Telegram.
+    """
     fps = cfg.montage_fps
-    cta_png = None
-    if cfg.cta_enabled and cfg.cta_text.strip():
-        cta_png = os.path.join(cfg.work_dir, f"{key}_cta.png")
-        make_cta_image(cfg.cta_text, cfg, cta_png)
+    is_last_part = (part is None) or (part >= n_parts)
 
-    scene_files: List[str] = []
+    # (C) Accroche : la plus forte de la partie -> bandeau haut en ouverture.
+    hook_png = None
+    best = max(scenes, key=lambda s: s[2].final_score, default=None)
+    hook_text = (best[2].hook or "").strip() if best else ""
+    if cfg.show_hook and hook_text:
+        hook_png = os.path.join(cfg.work_dir, f"{key}_hook.png")
+        make_hook_image(hook_text, cfg, hook_png)
 
-    # Générique animé en ouverture (nom du film + éventuel « Partie N »).
+    # (A) Titre incrusté sur l'action plutôt qu'un générique figé.
+    title_png = None
     if cfg.intro_title.strip():
         title_png = os.path.join(cfg.work_dir, f"{key}_title.png")
         make_title_image(cfg.intro_title, cfg, title_png, subtitle=subtitle)
-        intro_file = os.path.join(cfg.work_dir, f"{key}_montage_intro.mp4")
-        bg_start = scenes[0][0] if scenes else 0.0
-        log.info("  générique : « %s »%s", cfg.intro_title, f" — {subtitle}" if subtitle else "")
-        media.render_intro(video_path, bg_start, cfg.intro_duration, title_png,
-                           intro_file, cfg, fps)
-        scene_files.append(intro_file)
 
+    # (B) Carton de fin : « suite » pour les parties intermédiaires, sinon CTA.
+    end_png = end_kind = None
+    if not is_last_part:
+        end_png = os.path.join(cfg.work_dir, f"{key}_suite.png")
+        make_suite_image(part + 1, cfg, end_png)
+        end_kind = f"suite → Partie {part + 1}"
+    elif cfg.cta_enabled and cfg.cta_text.strip():
+        end_png = os.path.join(cfg.work_dir, f"{key}_cta.png")
+        make_cta_image(cfg.cta_text, cfg, end_png)
+        end_kind = "carton CTA"
+
+    scene_files: List[str] = []
+    last_i = len(scenes) - 1
     for i, (start, end, _moment) in enumerate(scenes):
         scene_file = os.path.join(cfg.work_dir, f"{key}_montage_scene{i:02d}.mp4")
-        is_last = (i == len(scenes) - 1)
-        log.info("  scène %d/%d  [%.0fs → %.0fs]%s",
-                 i + 1, len(scenes), start, end, "  + carton CTA" if (is_last and cta_png) else "")
+        first, is_last = (i == 0), (i == last_i)
+        extras = []
+        if first and title_png:
+            extras.append(f"titre « {cfg.intro_title} »")
+        if first and hook_png:
+            extras.append("accroche")
+        if is_last and end_png:
+            extras.append(end_kind)
+        log.info("  scène %d/%d  [%.0fs → %.0fs]%s", i + 1, len(scenes), start, end,
+                 ("  + " + " + ".join(extras)) if extras else "")
         media.render_scene(video_path, start, cfg.scene_duration, scene_file, cfg, fps,
-                           cta_png=cta_png if is_last else None)
+                           cta_png=end_png if is_last else None,
+                           title_png=title_png if first else None,
+                           hook_png=hook_png if first else None,
+                           title_hold=cfg.intro_duration, hook_hold=cfg.hook_duration)
         scene_files.append(scene_file)
 
     log.info("Assemblage des %d scène(s) avec transitions « %s »…", len(scene_files), cfg.transition)
@@ -266,6 +382,7 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
     return {
         "output_path": out_path,
         "duration": info.duration,
+        "hook": hook_text,
         "scenes": [
             {"index": i + 1, "start": s, "end": e, "hook": m.hook, "emotion": m.emotion,
              "final_score": round(m.final_score, 1)}

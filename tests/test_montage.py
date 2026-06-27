@@ -83,3 +83,36 @@ def test_make_title_image_creates_png(tmp_path):
     assert im.size == (1080, 1920)
     # du texte opaque a bien été dessiné
     assert any(p[3] > 0 for p in im.getdata())
+
+
+def test_make_suite_image_creates_png(tmp_path):
+    pytest.importorskip("PIL")
+    from clipper.montage import make_suite_image
+
+    cfg = Config(width=1080, height=1920)
+    out = tmp_path / "suite.png"
+    make_suite_image(2, cfg, str(out))
+    assert out.is_file()
+
+    from PIL import Image
+    im = Image.open(out).convert("RGBA")
+    assert im.size == (1080, 1920)
+    # le bandeau central est opaque
+    assert im.getpixel((540, 960))[3] > 0
+
+
+def test_make_hook_image_top_banner(tmp_path):
+    pytest.importorskip("PIL")
+    from clipper.montage import make_hook_image
+
+    cfg = Config(width=1080, height=1920)
+    out = tmp_path / "hook.png"
+    make_hook_image("La révélation qui change tout", cfg, str(out))
+    assert out.is_file()
+
+    from PIL import Image
+    im = Image.open(out).convert("RGBA")
+    assert im.size == (1080, 1920)
+    # le bandeau est en haut : opaque vers le haut, transparent vers le bas
+    assert im.getpixel((540, int(1920 * 0.18)))[3] > 0
+    assert im.getpixel((540, int(1920 * 0.80)))[3] == 0

@@ -220,65 +220,64 @@ def render_clip(
 # --------------------------------------------------------------------------- #
 
 def render_scene(src: str, start: float, duration: float, out_path: str, cfg: Config,
-                 fps: int, cta_png: Optional[str] = None) -> str:
-    """Rend une scène : découpe, recadre en 9:16, fps fixe, carton CTA optionnel.
+                 fps: int, cta_png: Optional[str] = None,
+                 title_png: Optional[str] = None, hook_png: Optional[str] = None,
+                 title_hold: float = 2.5, hook_hold: float = 3.0) -> str:
+    """Rend une scène : découpe, recadre en 9:16, fps fixe, incrustations optionnelles.
 
-    Toutes les scènes partagent la même résolution, le même fps et le même format
-    pixel, ce qui est indispensable pour l'assemblage par fondu enchaîné (xfade).
+    Incrustations (toutes des images 9:16 transparentes, superposées par ffmpeg —
+    aucune dépendance à libass) :
+      - `title_png` : titre du film, incrusté SUR l'action en ouverture (fondu
+        entrée puis sortie après `title_hold` s + légère montée) ;
+      - `hook_png`  : bandeau d'accroche en haut, visible `hook_hold` s puis fondu ;
+      - `cta_png`   : carton de fin plein cadre, affiché toute la scène.
+
+    Toutes les scènes partagent résolution, fps et format pixel, ce qui est
+    indispensable pour l'assemblage par fondu enchaîné (xfade).
     """
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    base, last = build_vertical_filter(cfg, None)
+    base, cur = build_vertical_filter(cfg, None)
+    parts = [base]
+    inputs = ["-ss", f"{start:.3f}", "-i", src]
+    idx = 1
 
+    # Titre incrusté sur l'action (fondu entrée/sortie + légère montée).
+    if title_png:
+        hold = max(0.6, min(title_hold, duration - 0.4))
+        fo = max(0.3, hold - 0.5)
+        inputs += ["-loop", "1", "-i", title_png]
+        parts.append(f"[{idx}:v]fade=t=in:st=0:d=0.5:alpha=1,"
+                     f"fade=t=out:st={fo:.2f}:d=0.5:alpha=1[ttl{idx}]")
+        parts.append(f"{cur}[ttl{idx}]overlay=x=(W-w)/2:"
+                     f"y='(H-h)/2 + 50*(1-min(t/0.6,1))'[vo{idx}]")
+        cur = f"[vo{idx}]"
+        idx += 1
+
+    # Bandeau d'accroche en haut (les premières secondes), puis fondu.
+    if hook_png:
+        hold = max(0.6, min(hook_hold, duration - 0.4))
+        fo = max(0.3, hold - 0.5)
+        inputs += ["-loop", "1", "-i", hook_png]
+        parts.append(f"[{idx}:v]fade=t=in:st=0:d=0.3:alpha=1,"
+                     f"fade=t=out:st={fo:.2f}:d=0.5:alpha=1[hk{idx}]")
+        parts.append(f"{cur}[hk{idx}]overlay=0:0[vo{idx}]")
+        cur = f"[vo{idx}]"
+        idx += 1
+
+    # Carton de fin plein cadre (CTA / renvoi vers la partie suivante).
     if cta_png:
-        # Le carton est une image 9:16 transparente, superposée plein cadre.
-        filt = f"{base};{last}[1:v]overlay=(W-w)/2:(H-h)/2[vout]"
-        vmap = "[vout]"
-    else:
-        filt, vmap = base, last
+        inputs += ["-loop", "1", "-i", cta_png]
+        parts.append(f"{cur}[{idx}:v]overlay=(W-w)/2:(H-h)/2[vo{idx}]")
+        cur = f"[vo{idx}]"
+        idx += 1
 
-    cmd = ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", src]
-    if cta_png:
-        cmd += ["-loop", "1", "-i", cta_png]
-    cmd += [
-        "-filter_complex", filt,
-        "-map", vmap, "-map", "0:a?",
-        "-t", f"{duration:.3f}", "-r", str(fps),
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
-        out_path,
-    ]
-    _run(cmd)
-    return out_path
-
-
-def render_intro(src: str, bg_start: float, duration: float, title_png: str,
-                 out_path: str, cfg: Config, fps: int) -> str:
-    """Rend le générique animé : fond flou (tiré du film) + titre en fondu/montée.
-
-    Le titre est une image (Pillow) ; son animation (fondu alpha + légère montée)
-    et le fond flou sont gérés par ffmpeg — aucune dépendance à libass.
-    """
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    w, h = cfg.width, cfg.height
-    fade_out_start = max(0.1, duration - 0.6)
-
-    filt = (
-        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},"
-        f"boxblur=26:2,eq=brightness=-0.12:saturation=0.9[bg];"
-        f"[1:v]fade=t=in:st=0:d=0.7:alpha=1,"
-        f"fade=t=out:st={fade_out_start:.2f}:d=0.6:alpha=1[ttl];"
-        # Le titre monte légèrement pendant son apparition (animation).
-        f"[bg][ttl]overlay=x=(W-w)/2:y='(H-h)/2 + 60*(1-min(t/0.7,1))'[vout];"
-        f"[0:a]afade=t=in:st=0:d=0.5[aout]"
-    )
-    cmd = [
-        "ffmpeg", "-y", "-ss", f"{bg_start:.3f}", "-i", src, "-loop", "1", "-i", title_png,
-        "-filter_complex", filt, "-map", "[vout]", "-map", "[aout]",
-        "-t", f"{duration:.3f}", "-r", str(fps),
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
-        out_path,
-    ]
+    cmd = ["ffmpeg", "-y", *inputs,
+           "-filter_complex", ";".join(parts),
+           "-map", cur, "-map", "0:a?",
+           "-t", f"{duration:.3f}", "-r", str(fps),
+           "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
+           out_path]
     _run(cmd)
     return out_path
 
