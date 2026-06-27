@@ -347,6 +347,9 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
         make_cta_image(cfg.cta_text, cfg, end_png)
         end_kind = "carton CTA"
 
+    if hook_png:
+        log.info("  accroche maintenue en haut (toute la vidéo) : « %s »", hook_text)
+
     scene_files: List[str] = []
     last_i = len(scenes) - 1
     for i, (start, end, _moment) in enumerate(scenes):
@@ -355,8 +358,6 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
         extras = []
         if first and title_png:
             extras.append(f"titre « {cfg.intro_title} »")
-        if first and hook_png:
-            extras.append("accroche")
         if is_last and end_png:
             extras.append(end_kind)
         log.info("  scène %d/%d  [%.0fs → %.0fs]%s", i + 1, len(scenes), start, end,
@@ -364,8 +365,9 @@ def render_montage(video_path: str, scenes: List[Scene], cfg: Config,
         media.render_scene(video_path, start, cfg.scene_duration, scene_file, cfg, fps,
                            cta_png=end_png if is_last else None,
                            title_png=title_png if first else None,
-                           hook_png=hook_png if first else None,
-                           title_hold=cfg.intro_duration, hook_hold=cfg.hook_duration)
+                           hook_png=hook_png,  # incrusté sur chaque scène -> reste jusqu'à la fin
+                           title_hold=cfg.intro_duration,
+                           hook_fade_in=0.3 if first else 0.0)
         scene_files.append(scene_file)
 
     log.info("Assemblage des %d scène(s) avec transitions « %s »…", len(scene_files), cfg.transition)

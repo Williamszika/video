@@ -222,14 +222,15 @@ def render_clip(
 def render_scene(src: str, start: float, duration: float, out_path: str, cfg: Config,
                  fps: int, cta_png: Optional[str] = None,
                  title_png: Optional[str] = None, hook_png: Optional[str] = None,
-                 title_hold: float = 2.5, hook_hold: float = 3.0) -> str:
+                 title_hold: float = 2.5, hook_fade_in: float = 0.0) -> str:
     """Rend une scène : découpe, recadre en 9:16, fps fixe, incrustations optionnelles.
 
     Incrustations (toutes des images 9:16 transparentes, superposées par ffmpeg —
     aucune dépendance à libass) :
       - `title_png` : titre du film, incrusté SUR l'action en ouverture (fondu
         entrée puis sortie après `title_hold` s + légère montée) ;
-      - `hook_png`  : bandeau d'accroche en haut, visible `hook_hold` s puis fondu ;
+      - `hook_png`  : bandeau d'accroche en haut, affiché TOUTE la scène (entrée
+        en fondu sur `hook_fade_in` s si > 0, sinon présent dès la 1re image) ;
       - `cta_png`   : carton de fin plein cadre, affiché toute la scène.
 
     Toutes les scènes partagent résolution, fps et format pixel, ce qui est
@@ -253,14 +254,16 @@ def render_scene(src: str, start: float, duration: float, out_path: str, cfg: Co
         cur = f"[vo{idx}]"
         idx += 1
 
-    # Bandeau d'accroche en haut (les premières secondes), puis fondu.
+    # Bandeau d'accroche en haut : reste affiché toute la scène (donc toute la
+    # vidéo, puisqu'il est incrusté sur chaque scène). Entrée en fondu seulement
+    # sur la première scène pour une apparition douce.
     if hook_png:
-        hold = max(0.6, min(hook_hold, duration - 0.4))
-        fo = max(0.3, hold - 0.5)
         inputs += ["-loop", "1", "-i", hook_png]
-        parts.append(f"[{idx}:v]fade=t=in:st=0:d=0.3:alpha=1,"
-                     f"fade=t=out:st={fo:.2f}:d=0.5:alpha=1[hk{idx}]")
-        parts.append(f"{cur}[hk{idx}]overlay=0:0[vo{idx}]")
+        if hook_fade_in > 0:
+            parts.append(f"[{idx}:v]fade=t=in:st=0:d={hook_fade_in:.2f}:alpha=1[hk{idx}]")
+            parts.append(f"{cur}[hk{idx}]overlay=0:0[vo{idx}]")
+        else:
+            parts.append(f"{cur}[{idx}:v]overlay=0:0[vo{idx}]")
         cur = f"[vo{idx}]"
         idx += 1
 
