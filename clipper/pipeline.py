@@ -85,6 +85,28 @@ def run(video_path: str, cfg: Config) -> dict:
             result = montage.render_montage(video_path, scenes, cfg, f"{key}_{label}",
                                             out_path, subtitle=subtitle or "")
             result["part"] = (p + 1) if n_parts > 1 else None
+
+            # Hashtags TikTok + légende (bonus : ne jamais bloquer le montage).
+            if cfg.hashtags:
+                try:
+                    hooks = [s["hook"] for s in result["scenes"] if s.get("hook")]
+                    emotions = [s["emotion"] for s in result["scenes"] if s.get("emotion")]
+                    tags = analyze.generate_hashtags(
+                        cfg, title=cfg.intro_title, part_label=subtitle or "",
+                        scene_hooks=hooks, emotions=emotions, count=cfg.hashtags_count)
+                    result["hashtags"] = tags["hashtags"]
+                    result["caption"] = tags["caption"]
+                    if tags["hashtags"]:
+                        txt_path = os.path.splitext(out_path)[0] + ".txt"
+                        with open(txt_path, "w", encoding="utf-8") as fh:
+                            if tags["caption"]:
+                                fh.write(tags["caption"] + "\n\n")
+                            fh.write(" ".join(tags["hashtags"]) + "\n")
+                        result["caption_file"] = txt_path
+                        log.info("  hashtags : %s", " ".join(tags["hashtags"]))
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Génération des hashtags ignorée (%s).", exc)
+
             parts_out.append(result)
 
         if not parts_out:

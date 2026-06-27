@@ -86,6 +86,10 @@ def build_parser() -> argparse.ArgumentParser:
     g_mtg.add_argument("--parts", type=int, default=1,
                        help="Découper le film en N parties chronologiques (ex. 5 = Partie 1 à 5). "
                             "Active automatiquement le mode montage.")
+    g_mtg.add_argument("--no-hashtags", dest="hashtags", action="store_false",
+                       help="Ne pas générer les hashtags TikTok par montage/partie.")
+    g_mtg.add_argument("--hashtags-count", type=int, default=5,
+                       help="Nombre de hashtags TikTok à générer par montage/partie.")
 
     g_out = p.add_argument_group("Sortie")
     g_out.add_argument("-o", "--output", dest="output_dir", default="output",
@@ -139,6 +143,8 @@ def _config_from_args(args: argparse.Namespace) -> Config:
         cta_enabled=args.cta_enabled,
         intro_title=args.intro_title,
         intro_duration=args.intro_duration,
+        hashtags=args.hashtags,
+        hashtags_count=args.hashtags_count,
     )
 
 
@@ -193,6 +199,10 @@ def main(argv=None) -> int:
             label = f"Partie {res['part']}" if res.get("part") else "Montage"
             print(f"   {label}  [{int(dur // 60)}:{int(dur % 60):02d}]  "
                   f"({len(res['scenes'])} scènes)  → {res['output_path']}")
+            if res.get("hashtags"):
+                print(f"        #️⃣  {' '.join(res['hashtags'])}")
+            if res.get("caption_file"):
+                print(f"        📝  légende + hashtags : {res['caption_file']}")
         return 0
 
     print(f"✅ {manifest['num_clips']} short(s) généré(s) dans « {cfg.output_dir}/ » :")

@@ -118,11 +118,18 @@ clipper film.mp4 --parts 5 --crop blur --title "Le Destin de Michael" \
   **chronologiques** qui se suivent logiquement (Partie 1 = début … Partie 5 = fin).
   Chaque partie a son générique « Partie N / 5 » et son carton CTA. Idéal pour
   poster un film en feuilleton et faire revenir l'audience.
+- **Hashtags TikTok** (activés par défaut) : pour **chaque** montage/partie, l'IA
+  génère **5 hashtags optimisés pour la portée** — un mélange de tags à fort
+  trafic (#pourtoi, #film…), de tags ciblés sur le genre/l'émotion, et de tags
+  propres au film. Ils sont affichés à la fin et écrits dans un fichier `.txt`
+  (légende + hashtags) **à côté de chaque vidéo**, prêt à copier-coller. Réglable
+  avec `--hashtags-count N`, désactivable avec `--no-hashtags`.
 
 Tous les textes (générique, CTA) sont rendus en image (Pillow) puis incrustés :
 **pas besoin de libass**, ça marche même avec un ffmpeg minimal. Options :
 `--montage-duration`, `--scene-duration`, `--transition`, `--transition-duration`,
-`--cta`, `--no-cta`, `--title`, `--intro-duration`, `--parts`.
+`--cta`, `--no-cta`, `--title`, `--intro-duration`, `--parts`, `--hashtags-count`,
+`--no-hashtags`.
 
 Sortie typique :
 

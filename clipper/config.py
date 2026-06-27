@@ -71,6 +71,8 @@ class Config:
     intro_title: str = ""             # nom du film -> générique animé en ouverture (vide = pas de générique)
     intro_duration: float = 3.0       # durée du générique (secondes)
     parts: int = 1                    # découper le film en N parties (1 = un seul montage)
+    hashtags: bool = True             # générer des hashtags TikTok par montage/partie
+    hashtags_count: int = 5           # nombre de hashtags par montage/partie
 
     # --- Pondération du score de viralité ---
     weight_ai: float = 0.75           # poids du score Claude

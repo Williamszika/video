@@ -14,6 +14,7 @@ On utilise :
 from __future__ import annotations
 
 import json
+import re
 from typing import List, Optional
 
 from .config import Config
@@ -85,6 +86,129 @@ MOMENTS_SCHEMA = {
     "required": ["moments"],
     "additionalProperties": False,
 }
+
+
+# --------------------------------------------------------------------------- #
+# Hashtags TikTok (pour booster la portée de chaque montage / partie)
+# --------------------------------------------------------------------------- #
+
+HASHTAGS_SYSTEM_PROMPT = """\
+Tu es un expert en croissance et en viralité sur TikTok, spécialisé dans le \
+référencement par hashtags. Tu connais la mécanique de l'algorithme : le bon \
+jeu de hashtags MÉLANGE trois familles pour maximiser à la fois la portée et la \
+pertinence —
+1) des hashtags à très fort trafic (énorme volume, large portée : #pourtoi, \
+#fyp, #foryou, #viral, #film…) ;
+2) des hashtags ciblés sur le genre, le thème ou l'émotion de l'extrait \
+(communauté précise, fort taux d'engagement) ;
+3) un ou deux hashtags spécifiques au film lui-même (titre, personnage).
+
+On va te décrire un extrait (une partie d'un film monté pour TikTok). Tu dois \
+proposer les MEILLEURS hashtags, en français, pour booster sa visibilité.
+
+Règles strictes :
+- choisis des hashtags RÉELLEMENT pertinents par rapport au contenu décrit : \
+l'algorithme pénalise les tags hors-sujet ;
+- équilibre portée large ET ciblage (ne mets pas QUE des tags génériques) ;
+- chaque hashtag est un seul mot collé, sans espace, sans ponctuation, de \
+préférence sans accent (ex. « cinema » plutôt que « cinéma ») ;
+- aucun doublon ;
+- "caption" est une légende courte et accrocheuse (une seule phrase), en \
+français, SANS les hashtags, qui donne envie de regarder.\
+"""
+
+
+HASHTAGS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hashtags": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "caption": {"type": "string"},
+    },
+    "required": ["hashtags", "caption"],
+    "additionalProperties": False,
+}
+
+
+def _clean_hashtags(raw, count: int) -> List[str]:
+    """Normalise une liste de hashtags bruts renvoyés par le modèle.
+
+    - éclate les chaînes contenant plusieurs tags ("#a #b") ;
+    - retire le « # » de tête et toute ponctuation/espace interne (on garde
+      lettres — accents compris — chiffres et « _ ») ;
+    - déduplique sans tenir compte de la casse ;
+    - re-préfixe par « # » et limite à `count` éléments.
+    """
+    seen = set()
+    out: List[str] = []
+    for item in raw or []:
+        if not item:
+            continue
+        for token in str(item).split():
+            tag = re.sub(r"[^\w]", "", token.strip().lstrip("#")).strip("_")
+            if not tag:
+                continue
+            low = tag.lower()
+            if low in seen:
+                continue
+            seen.add(low)
+            out.append("#" + tag)
+            if len(out) >= count:
+                return out
+    return out
+
+
+def generate_hashtags(cfg: Config, *, title: str = "", part_label: str = "",
+                      scene_hooks=None, emotions=None, count: int = 5) -> dict:
+    """Demande à Claude des hashtags TikTok optimisés pour la portée.
+
+    Renvoie {"hashtags": [...], "caption": "..."}. La fonction est volontairement
+    robuste : l'appelant l'enveloppe dans un try/except, mais on renvoie aussi
+    une structure cohérente même si le modèle répond peu.
+    """
+    scene_hooks = [h for h in (scene_hooks or []) if h]
+    emotions = [e for e in (emotions or []) if e]
+
+    desc_lines = []
+    if title:
+        desc_lines.append(f"Film : « {title} ».")
+    if part_label:
+        desc_lines.append(f"Partie : {part_label}.")
+    if emotions:
+        desc_lines.append("Émotions dominantes : " + ", ".join(sorted(set(emotions))) + ".")
+    if scene_hooks:
+        desc_lines.append("Accroches des scènes : " + " | ".join(scene_hooks[:8]))
+    description = "\n".join(desc_lines) or "Extrait d'un film monté pour TikTok."
+
+    user_prompt = (
+        f"Voici la vidéo à publier sur TikTok :\n{description}\n\n"
+        f"Donne exactement {count} hashtags optimisés pour un maximum de "
+        f"visibilité (mélange portée large + ciblage précis), et une légende courte."
+    )
+
+    client = _get_client(cfg)
+    message = client.messages.create(
+        model=cfg.model,
+        max_tokens=1200,
+        thinking={"type": "adaptive"},
+        output_config={
+            "effort": "low",
+            "format": {"type": "json_schema", "schema": HASHTAGS_SCHEMA},
+        },
+        system=[{
+            "type": "text",
+            "text": HASHTAGS_SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }],
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    data = _extract_json(message)
+    return {
+        "hashtags": _clean_hashtags(data.get("hashtags", []), count),
+        "caption": (data.get("caption") or "").strip(),
+    }
 
 
 def _build_chunks(transcript: Transcript, chunk_seconds: float):
