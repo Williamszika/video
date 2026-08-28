@@ -199,10 +199,16 @@ Voir `clipper --help` pour la liste complète.
 
 - **Transcription** : gratuite (Whisper en local).
 - **Analyse Claude** : seule la transcription textuelle est envoyée (pas la
-  vidéo). Le coût dépend de la longueur de la vidéo et du modèle. Pour réduire :
-  `--model claude-sonnet-4-6` ou `--effort medium`.
-- Les résultats intermédiaires (transcription, analyse) sont **mis en cache**
-  dans `output/work/` : relancer le même fichier ne re-paie pas l'analyse.
+  vidéo). Compte environ **0,50 à 1 $ par film** de 2 h avec le modèle par défaut
+  (Opus, $5/$25 par million de tokens). Pour réduire la facture :
+  `--model claude-sonnet-5` (~2× moins cher, $2/$10), `--model claude-haiku-4-5`
+  (~4× moins cher, $1/$5) ou `--effort medium`.
+- Si l'analyse échoue avec « **credit balance is too low** », il ne s'agit pas
+  d'un bug : recharge le compte sur <https://console.anthropic.com/> →
+  *Plans & Billing*, puis relance la même commande.
+- Les résultats intermédiaires (transcription, analyse, titre détecté) sont **mis
+  en cache** dans `output/work/` : relancer le même fichier ne re-transcrit pas et
+  ne re-paie pas l'analyse déjà faite.
 
 ---
 
